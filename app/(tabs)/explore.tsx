@@ -23,36 +23,36 @@ interface CommunityFeedItem {
 }
 
 const COMMUNITY_FEED: CommunityFeedItem[] = [
-  {
-    id: 'f1',
-    userName: 'Sarah Chen',
-    userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    userRole: 'Lead Developer',
-    actionTitle: 'Completed 120m TypeScript Performance Tuning & Refactoring 🚀',
-    category: 'Coding',
-    timeAgo: '2 hours ago',
-    kudosCount: 14,
-  },
-  {
-    id: 'f2',
-    userName: 'Marcus Vance',
-    userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    userRole: 'Marathon Runner',
-    actionTitle: 'Logged 10km Trail Run in under 48 minutes 🏃‍♂️🔥',
-    category: 'Workout',
-    timeAgo: '4 hours ago',
-    kudosCount: 29,
-  },
-  {
-    id: 'f3',
-    userName: 'Elena Rostova',
-    userAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-    userRole: 'Product Manager',
-    actionTitle: 'Finished reading "Deep Work" by Cal Newport 📖',
-    category: 'Reading',
-    timeAgo: '6 hours ago',
-    kudosCount: 19,
-  },
+  // {
+  //   id: 'f1',
+  //   userName: 'Sarah Chen',
+  //   userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+  //   userRole: 'Lead Developer',
+  //   actionTitle: 'Completed 120m TypeScript Performance Tuning & Refactoring 🚀',
+  //   category: 'Coding',
+  //   timeAgo: '2 hours ago',
+  //   kudosCount: 14,
+  // },
+  // {
+  //   id: 'f2',
+  //   userName: 'Marcus Vance',
+  //   userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+  //   userRole: 'Marathon Runner',
+  //   actionTitle: 'Logged 10km Trail Run in under 48 minutes 🏃‍♂️🔥',
+  //   category: 'Workout',
+  //   timeAgo: '4 hours ago',
+  //   kudosCount: 29,
+  // },
+  // {
+  //   id: 'f3',
+  //   userName: 'Elena Rostova',
+  //   userAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+  //   userRole: 'Product Manager',
+  //   actionTitle: 'Finished reading "Deep Work" by Cal Newport 📖',
+  //   category: 'Reading',
+  //   timeAgo: '6 hours ago',
+  //   kudosCount: 19,
+  // },
 ];
 
 export default function ExploreScreen() {
