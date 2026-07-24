@@ -19,7 +19,7 @@ interface ChangePasswordModalProps {
 }
 
 export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ visible, onClose }) => {
-  const { themeMode } = useAuth();
+  const { themeMode, user, updateProfile } = useAuth();
   const isDark = themeMode === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
 
@@ -35,6 +35,11 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ visibl
       return;
     }
 
+    if (currentPass !== user?.password) {
+      setStatusMsg({ isError: true, text: 'Current password is incorrect.' });
+      return;
+    }
+
     if (newPass.length < 6) {
       setStatusMsg({ isError: true, text: 'New password must be at least 6 characters long.' });
       return;
@@ -45,6 +50,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ visibl
       return;
     }
 
+    updateProfile({ password: newPass });
     setStatusMsg({ isError: false, text: 'Password successfully updated!' });
     setTimeout(() => {
       setCurrentPass('');

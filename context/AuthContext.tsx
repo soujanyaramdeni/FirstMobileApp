@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  password: string;
   avatar: string;
   bio: string;
   role: string;
@@ -26,6 +28,14 @@ export interface Activity {
   notes?: string;
 }
 
+export interface Badge {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  unlocked: boolean;
+}
+
 export interface Goal {
   id: string;
   title: string;
@@ -37,112 +47,76 @@ export interface Goal {
 interface AuthContextType {
   user: User | null;
   allUsers: User[];
+  badges: Badge[];
   activities: Activity[];
   goals: Goal[];
   themeMode: 'dark' | 'light';
+  isLoading: boolean;
+
   toggleTheme: () => void;
-  login: (email: string, pass: string) => { success: boolean; message: string };
-  register: (userData: { name: string; email: string; password?: string; bio?: string; interests?: string[]; avatar?: string }) => { success: boolean; message: string };
+
+  login: (
+    email: string,
+    pass: string
+  ) => {
+    success: boolean;
+    message: string;
+  };
+
+  register: (userData: {
+    name: string;
+    email: string;
+    password: string;
+    bio?: string;
+    interests?: string[];
+    avatar?: string;
+  }) => {
+    success: boolean;
+    message: string;
+  };
+
   logout: () => void;
+
   updateProfile: (updated: Partial<User>) => void;
-  addActivity: (activity: Omit<Activity, 'id' | 'userId'>) => void;
+
+  updateBadges: (updatedBadges: Badge[]) => void;
+
+  addActivity: (
+    activity: Omit<Activity, 'id' | 'userId'>
+  ) => void;
+
   deleteActivity: (id: string) => void;
+
   toggleGoal: (id: string) => void;
-  addGoal: (goal: Omit<Goal, 'id' | 'completed'>) => void;
+
+  addGoal: (
+    goal: Omit<Goal, 'id' | 'completed'>
+  ) => void;
+
   quickLogin: (email: string) => void;
 }
 
-const INITIAL_BADGES = [
-  { id: '1', name: 'Early Bird', icon: 'sunny-outline', description: 'Log an activity before 8 AM', unlocked: true },
-  { id: '2', name: 'Code Ninja', icon: 'code-slash-outline', description: 'Complete 10 hours of coding', unlocked: true },
-  { id: '3', name: 'Streak Master', icon: 'flame-outline', description: 'Maintain a 7-day activity streak', unlocked: true },
-  { id: '4', name: 'Iron Fitness', icon: 'barbell-outline', description: 'Log 5 workout sessions', unlocked: false },
-  { id: '5', name: 'Bookworm', icon: 'book-outline', description: 'Read for over 5 hours', unlocked: false },
+// AsyncStorage keys — bump these if you ever change the shape of the stored data.
+const STORAGE_KEYS = {
+  USERS: '@pulsetrack/users',
+  CURRENT_USER_ID: '@pulsetrack/currentUserId',
+  BADGES: '@pulsetrack/badges',
+  ACTIVITIES: '@pulsetrack/activities',
+  GOALS: '@pulsetrack/goals',
+  THEME: '@pulsetrack/theme',
+};
+
+const INITIAL_BADGES: Badge[] = [
+  // { id: '1', name: 'Early Bird', icon: 'sunny-outline', description: 'Log an activity before 8 AM', unlocked: true },
+  // { id: '2', name: 'Code Ninja', icon: 'code-slash-outline', description: 'Complete 10 hours of coding', unlocked: true },
+  // { id: '3', name: 'Streak Master', icon: 'flame-outline', description: 'Maintain a 7-day activity streak', unlocked: true },
+  // { id: '4', name: 'Iron Fitness', icon: 'barbell-outline', description: 'Log 5 workout sessions', unlocked: false },
+  // { id: '5', name: 'Bookworm', icon: 'book-outline', description: 'Read for over 5 hours', unlocked: false },
 ];
 
-const INITIAL_USERS: User[] = [
-  // {
-  //   id: 'usr_1',
-  //   name: 'Alex Morgan',
-  //   email: 'alex@example.com',
-  //   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  //   bio: 'Product Designer & Tech Enthusiast 🎨 | Daily Fitness Runner 🏃‍♂️',
-  //   role: 'Product Designer',
-  //   joinDate: 'Jan 2026',
-  //   streak: 7,
-  //   points: 1250,
-  //   level: 4,
-  //   badges: INITIAL_BADGES,
-  //   interests: ['Coding', 'Fitness', 'Design', 'Reading'],
-  // },
-  // {
-  //   id: 'usr_2',
-  //   name: 'Sarah Chen',
-  //   email: 'sarah@example.com',
-  //   avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-  //   bio: 'Fullstack Software Engineer 💻 | Open Source Contributor',
-  //   role: 'Lead Developer',
-  //   joinDate: 'Feb 2026',
-  //   streak: 12,
-  //   points: 2100,
-  //   level: 6,
-  //   badges: INITIAL_BADGES.map(b => ({ ...b, unlocked: true })),
-  //   interests: ['Coding', 'Productivity', 'Mindfulness'],
-  // },
-];
+const INITIAL_USERS: User[] = [];
 
-const INITIAL_ACTIVITIES: Activity[] = [
-  // {
-  //   id: 'act_1',
-  //   userId: 'usr_1',
-  //   title: 'Morning High-Intensity Workout',
-  //   category: 'Workout',
-  //   duration: 45,
-  //   points: 120,
-  //   date: new Date(Date.now() - 3600000 * 2).toISOString(),
-  //   notes: 'Pushed hard today! 5km run followed by core strength training.',
-  // },
-  // {
-  //   id: 'act_2',
-  //   userId: 'usr_1',
-  //   title: 'React Native & Expo Router Refactoring',
-  //   category: 'Coding',
-  //   duration: 90,
-  //   points: 250,
-  //   date: new Date(Date.now() - 3600000 * 24).toISOString(),
-  //   notes: 'Built AuthContext and redesigned app navigation with sleek modern cards.',
-  // },
-  // {
-  //   id: 'act_3',
-  //   userId: 'usr_1',
-  //   title: 'Atomic Habits - Chapter 4 & 5',
-  //   category: 'Reading',
-  //   duration: 30,
-  //   points: 80,
-  //   date: new Date(Date.now() - 3600000 * 48).toISOString(),
-  //   notes: 'Great insights on visual cues and habit stacking.',
-  // },
-  // {
-  //   id: 'act_4',
-  //   userId: 'usr_1',
-  //   title: 'Guided Evening Meditation',
-  //   category: 'Mindfulness',
-  //   duration: 20,
-  //   points: 60,
-  //   date: new Date(Date.now() - 3600000 * 72).toISOString(),
-  //   notes: 'Calmed the mind after a busy sprint day.',
-  // },
-  // {
-  //   id: 'act_5',
-  //   userId: 'usr_2',
-  //   title: 'TypeScript Performance Tuning',
-  //   category: 'Coding',
-  //   duration: 120,
-  //   points: 300,
-  //   date: new Date(Date.now() - 3600000 * 5).toISOString(),
-  //   notes: 'Optimized build times and resolved circular dependencies.',
-  // },
-];
+const INITIAL_ACTIVITIES: Activity[] = [];
 
 const INITIAL_GOALS: Goal[] = [
   { id: 'g1', title: 'Complete 30-min workout', category: 'Workout', completed: true, points: 50 },
@@ -153,12 +127,106 @@ const INITIAL_GOALS: Goal[] = [
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Small helper so a failed read/write never crashes the app — it just falls back silently.
+async function loadJSON<T>(key: string, fallback: T): Promise<T> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    return raw != null ? (JSON.parse(raw) as T) : fallback;
+  } catch (e) {
+    console.warn(`Failed to load "${key}" from storage`, e);
+    return fallback;
+  }
+}
+
+async function saveJSON<T>(key: string, value: T): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn(`Failed to save "${key}" to storage`, e);
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [allUsers, setAllUsers] = useState<User[]>(INITIAL_USERS);
-  const [user, setUser] = useState<User | null>(INITIAL_USERS[0]); // Default logged in as Alex Morgan for smooth demo testing
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [badges, setBadges] = useState<Badge[]>(INITIAL_BADGES);
   const [activities, setActivities] = useState<Activity[]>(INITIAL_ACTIVITIES);
   const [goals, setGoals] = useState<Goal[]>(INITIAL_GOALS);
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark');
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Guards against writing the (still empty) initial state back to storage
+  // before the very first load has finished.
+  const hasHydrated = useRef(false);
+
+  const user = allUsers.find(u => u.id === currentUserId) ?? null;
+
+  // ---- Load everything from AsyncStorage once, on app start ----
+  useEffect(() => {
+    (async () => {
+      const [
+        storedUsers,
+        storedUserId,
+        storedBadges,
+        storedActivities,
+        storedGoals,
+        storedTheme,
+      ] = await Promise.all([
+        loadJSON<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS),
+        AsyncStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID),
+        loadJSON<Badge[]>(STORAGE_KEYS.BADGES, INITIAL_BADGES),
+        loadJSON<Activity[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES),
+        loadJSON<Goal[]>(STORAGE_KEYS.GOALS, INITIAL_GOALS),
+        AsyncStorage.getItem(STORAGE_KEYS.THEME),
+      ]);
+
+      setAllUsers(storedUsers);
+      setCurrentUserId(storedUserId ?? null);
+      setBadges(storedBadges);
+      setActivities(storedActivities);
+      setGoals(storedGoals);
+      if (storedTheme === 'dark' || storedTheme === 'light') setThemeMode(storedTheme);
+
+      hasHydrated.current = true;
+      setIsLoading(false);
+    })();
+  }, []);
+
+  // ---- Persist back to AsyncStorage whenever data changes ----
+  useEffect(() => {
+    if (!hasHydrated.current) return;
+    saveJSON(STORAGE_KEYS.USERS, allUsers);
+  }, [allUsers]);
+
+  useEffect(() => {
+    if (!hasHydrated.current) return;
+    if (currentUserId) {
+      AsyncStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId).catch(() => { });
+    } else {
+      AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID).catch(() => { });
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!hasHydrated.current) return;
+    saveJSON(STORAGE_KEYS.ACTIVITIES, activities);
+  }, [activities]);
+
+  useEffect(() => {
+    if (!hasHydrated.current) return;
+    saveJSON(STORAGE_KEYS.GOALS, goals);
+  }, [goals]);
+
+  useEffect(() => {
+    if (!hasHydrated.current) return;
+    AsyncStorage.setItem(STORAGE_KEYS.THEME, themeMode).catch(() => { });
+  }, [themeMode]);
+
+  useEffect(() => {
+    if (!hasHydrated.current) return;
+
+    saveJSON(STORAGE_KEYS.BADGES, badges);
+  }, [badges]);
 
   const toggleTheme = () => {
     setThemeMode(prev => (prev === 'dark' ? 'light' : 'dark'));
@@ -167,25 +235,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = (email: string, pass: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const existingUser = allUsers.find(u => u.email.toLowerCase() === cleanEmail);
-    
+
     if (!existingUser) {
       return { success: false, message: 'No account found with this email. Please register.' };
     }
-    
-    setUser(existingUser);
+
+    if (existingUser.password !== pass) {
+      return { success: false, message: 'Incorrect password. Please try again.' };
+    }
+
+    setCurrentUserId(existingUser.id);
     return { success: true, message: 'Login successful!' };
   };
 
   const quickLogin = (email: string) => {
     const existingUser = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (existingUser) {
-      setUser(existingUser);
+      setCurrentUserId(existingUser.id);
     }
   };
 
-  const register = (userData: { name: string; email: string; password?: string; bio?: string; interests?: string[]; avatar?: string }) => {
+  const register = (userData: { name: string; email: string; password: string; bio?: string; interests?: string[]; avatar?: string }) => {
     const cleanEmail = userData.email.trim().toLowerCase();
-    
+
     if (allUsers.some(u => u.email.toLowerCase() === cleanEmail)) {
       return { success: false, message: 'An account with this email already exists.' };
     }
@@ -194,6 +266,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: `usr_${Date.now()}`,
       name: userData.name.trim(),
       email: cleanEmail,
+      password: userData.password,
       avatar: userData.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       bio: userData.bio || 'New active member pursuing goals!',
       role: 'Member',
@@ -201,24 +274,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       streak: 1,
       points: 100, // Welcome bonus
       level: 1,
-      badges: INITIAL_BADGES,
+      badges: [...INITIAL_BADGES],
       interests: userData.interests || ['Productivity'],
     };
 
     setAllUsers(prev => [...prev, newUser]);
-    setUser(newUser);
+    setCurrentUserId(newUser.id);
     return { success: true, message: 'Account created successfully!' };
   };
 
   const logout = () => {
-    setUser(null);
+    setCurrentUserId(null);
   };
 
   const updateProfile = (updated: Partial<User>) => {
     if (!user) return;
     const updatedUser = { ...user, ...updated };
-    setUser(updatedUser);
     setAllUsers(prev => prev.map(u => (u.id === user.id ? updatedUser : u)));
+  };
+
+  const updateBadges = (updatedBadges: Badge[]) => {
+    if (!user) return;
+    setBadges(updatedBadges);
+    const updatedUser = {
+      ...user,
+      badges: updatedBadges,
+    };
+    setAllUsers(prev =>
+      prev.map(u =>
+        u.id === user.id ? updatedUser : u
+      )
+    );
   };
 
   const addActivity = (activityData: Omit<Activity, 'id' | 'userId'>) => {
@@ -276,14 +362,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         allUsers,
-        activities: user ? activities.filter(a => a.userId === user.id) : [],
+        badges,
+        activities: user
+          ? activities.filter(a => a.userId === user.id)
+          : [],
         goals,
         themeMode,
+        isLoading,
         toggleTheme,
         login,
         register,
         logout,
         updateProfile,
+        updateBadges,
         addActivity,
         deleteActivity,
         toggleGoal,
