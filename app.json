@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "MyFirstApp",
+    "name": "StudyDay",
     "slug": "react-native-applications",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/mobileApp.png",
     "scheme": "myfirstapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
