@@ -12,12 +12,13 @@ export const Palette = {
   purple: '#8B5CF6',
   pink: '#EC4899',
   cyan: '#06B6D4',
+  teal: '#14B8A6',
   
   // Neutral dark
-  darkBg: '#0F172A',
-  darkCard: '#1E293B',
-  darkCardBorder: '#334155',
-  darkInput: '#1E293B',
+  darkBg: '#0B0F19',
+  darkCard: '#151D2A',
+  darkCardBorder: '#232D3F',
+  darkInput: '#1A2332',
   darkText: '#F8FAFC',
   darkSubtext: '#94A3B8',
 
@@ -30,13 +31,13 @@ export const Palette = {
   lightSubtext: '#64748B',
 };
 
-export const CategoryColors: Record<string, { bg: string; text: string; icon: string }> = {
-  Workout: { bg: '#FEE2E2', text: '#DC2626', icon: 'fitness-outline' },
-  Coding: { bg: '#E0E7FF', text: '#4338CA', icon: 'code-slash-outline' },
-  Reading: { bg: '#FEF3C7', text: '#D97706', icon: 'book-outline' },
-  Productivity: { bg: '#D1FAE5', text: '#059669', icon: 'briefcase-outline' },
-  Mindfulness: { bg: '#F3E8FF', text: '#7C3AED', icon: 'heart-outline' },
-  Other: { bg: '#E2E8F0', text: '#475569', icon: 'grid-outline' },
+export const CategoryColors: Record<string, { bg: string; text: string; icon: string; accent: string }> = {
+  Workout: { bg: 'rgba(239, 68, 68, 0.15)', text: '#EF4444', icon: 'fitness-outline', accent: '#EF4444' },
+  Coding: { bg: 'rgba(99, 102, 241, 0.15)', text: '#6366F1', icon: 'code-slash-outline', accent: '#6366F1' },
+  Reading: { bg: 'rgba(245, 158, 11, 0.15)', text: '#F59E0B', icon: 'book-outline', accent: '#F59E0B' },
+  Productivity: { bg: 'rgba(16, 185, 129, 0.15)', text: '#10B981', icon: 'briefcase-outline', accent: '#10B981' },
+  Mindfulness: { bg: 'rgba(139, 92, 246, 0.15)', text: '#8B5CF6', icon: 'heart-outline', accent: '#8B5CF6' },
+  Other: { bg: 'rgba(6, 182, 212, 0.15)', text: '#06B6D4', icon: 'grid-outline', accent: '#06B6D4' },
 };
 
 export const Colors = {
@@ -55,6 +56,9 @@ export const Colors = {
     success: Palette.secondary,
     warning: Palette.accent,
     danger: Palette.danger,
+    purple: Palette.purple,
+    pink: Palette.pink,
+    cyan: Palette.cyan,
   },
   dark: {
     text: Palette.darkText,
@@ -66,11 +70,14 @@ export const Colors = {
     tint: Palette.primaryLight,
     tabIconDefault: '#64748B',
     tabIconSelected: Palette.primaryLight,
-    border: '#334155',
+    border: '#232D3F',
     primary: Palette.primaryLight,
     success: Palette.secondaryLight,
     warning: Palette.accent,
     danger: Palette.danger,
+    purple: Palette.purple,
+    pink: Palette.pink,
+    cyan: Palette.cyan,
   },
 };
 
