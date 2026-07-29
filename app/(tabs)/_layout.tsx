@@ -1,8 +1,49 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+} from 'react-native-reanimated';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/theme';
+
+/** A tab icon that pops with a little spring bounce whenever it becomes focused. */
+function AnimatedTabIcon({
+  name,
+  focusedName,
+  color,
+  focused,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  focusedName: keyof typeof Ionicons.glyphMap;
+  color: string;
+  focused: boolean;
+}) {
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (focused) {
+      scale.value = withSequence(
+        withSpring(1.25, { damping: 6, stiffness: 240 }),
+        withSpring(1, { damping: 8, stiffness: 220 })
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Animated.View style={style}>
+      <Ionicons name={focused ? focusedName : name} size={24} color={color} />
+    </Animated.View>
+  );
+}
 
 export default function TabLayout() {
   const { themeMode } = useAuth();
@@ -33,7 +74,7 @@ export default function TabLayout() {
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'grid' : 'grid-outline'} size={24} color={color} />
+            <AnimatedTabIcon name="grid-outline" focusedName="grid" color={color} focused={focused} />
           ),
         }}
       />
@@ -42,7 +83,7 @@ export default function TabLayout() {
         options={{
           title: 'Activities',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'list' : 'list-outline'} size={24} color={color} />
+            <AnimatedTabIcon name="list-outline" focusedName="list" color={color} focused={focused} />
           ),
         }}
       />
@@ -51,7 +92,7 @@ export default function TabLayout() {
         options={{
           title: 'Explore',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'compass' : 'compass-outline'} size={24} color={color} />
+            <AnimatedTabIcon name="compass-outline" focusedName="compass" color={color} focused={focused} />
           ),
         }}
       />
@@ -60,7 +101,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
+            <AnimatedTabIcon name="person-outline" focusedName="person" color={color} focused={focused} />
           ),
         }}
       />

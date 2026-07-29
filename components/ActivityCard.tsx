@@ -1,6 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  FadeInRight,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Activity } from '@/context/AuthContext';
 import { Colors, CategoryColors } from '@/constants/theme';
 
@@ -8,32 +18,82 @@ interface ActivityCardProps {
   activity: Activity;
   onDelete?: (id: string) => void;
   isDark?: boolean;
+  index?: number;
 }
+
+const SWIPE_ACTION_WIDTH = 84;
 
 export const ActivityCard: React.FC<ActivityCardProps> = ({
   activity,
   onDelete,
   isDark = true,
+  index = 0,
 }) => {
   const theme = isDark ? Colors.dark : Colors.light;
   const categoryMeta = CategoryColors[activity.category] || CategoryColors.Other;
 
+  const translateX = useSharedValue(0);
+  const cardOpacity = useSharedValue(1);
+
   const handleDelete = () => {
     if (Platform.OS === 'web') {
       if (window.confirm(`Delete "${activity.title}"?`)) {
-        onDelete?.(activity.id);
+        runDeleteAnimation();
+      } else {
+        translateX.value = withSpring(0, { damping: 16 });
       }
     } else {
       Alert.alert(
         'Delete Activity',
         `Are you sure you want to delete "${activity.title}"?`,
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: () => onDelete?.(activity.id) },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => {
+              translateX.value = withSpring(0, { damping: 16 });
+            },
+          },
+          { text: 'Delete', style: 'destructive', onPress: () => runDeleteAnimation() },
         ]
       );
     }
   };
+
+  const runDeleteAnimation = () => {
+    cardOpacity.value = withTiming(0, { duration: 180 });
+    translateX.value = withTiming(-400, { duration: 220 }, finished => {
+      if (finished) {
+        runOnJS(onDelete?.bind(null, activity.id) ?? (() => {}))();
+      }
+    });
+  };
+
+  const panGesture = onDelete
+    ? Gesture.Pan()
+        .activeOffsetX([-10, 10])
+        .onUpdate(e => {
+          const next = Math.min(0, Math.max(e.translationX, -SWIPE_ACTION_WIDTH - 20));
+          translateX.value = next;
+        })
+        .onEnd(() => {
+          if (translateX.value < -SWIPE_ACTION_WIDTH / 2) {
+            translateX.value = withSpring(-SWIPE_ACTION_WIDTH, { damping: 18 });
+            runOnJS(Haptics.selectionAsync)();
+          } else {
+            translateX.value = withSpring(0, { damping: 18 });
+          }
+        })
+    : undefined;
+
+  const cardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+    opacity: cardOpacity.value,
+  }));
+
+  const actionStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, -translateX.value / SWIPE_ACTION_WIDTH),
+  }));
 
   const formattedDate = new Date(activity.date).toLocaleDateString(undefined, {
     month: 'short',
@@ -42,8 +102,10 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
     minute: '2-digit',
   });
 
-  return (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+  const cardContent = (
+    <Animated.View
+      style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }, cardStyle]}
+    >
       <View style={styles.topRow}>
         <View style={styles.titleGroup}>
           <View style={[styles.categoryBadge, { backgroundColor: categoryMeta.bg }]}>
@@ -85,16 +147,55 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
           <Text style={[styles.pointsText, { color: theme.primary }]}>+{activity.points} XP</Text>
         </View>
       </View>
-    </View>
+    </Animated.View>
+  );
+
+  return (
+    <Animated.View
+      entering={FadeInRight.delay(index * 60).springify().damping(16)}
+      style={styles.wrapper}
+    >
+      {onDelete ? (
+        <Animated.View style={[styles.swipeAction, actionStyle]} pointerEvents="none">
+          <Ionicons name="trash" size={22} color="#FFF" />
+          <Text style={styles.swipeActionText}>Delete</Text>
+        </Animated.View>
+      ) : null}
+
+      {panGesture ? (
+        <GestureDetector gesture={panGesture}>{cardContent}</GestureDetector>
+      ) : (
+        cardContent
+      )}
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
+  wrapper: {
+    marginBottom: 12,
+  },
+  swipeAction: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: SWIPE_ACTION_WIDTH,
+    borderRadius: 16,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeActionText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   card: {
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,

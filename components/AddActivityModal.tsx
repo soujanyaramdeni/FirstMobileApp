@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -11,6 +11,12 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+} from 'react-native-reanimated';
 import { useAuth, Activity } from '@/context/AuthContext';
 import { Colors, CategoryColors } from '@/constants/theme';
 
@@ -40,6 +46,19 @@ export const AddActivityModal: React.FC<AddActivityModalProps> = ({ visible, onC
   const [duration, setDuration] = useState(30);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+
+  const xpPulse = useSharedValue(1);
+  useEffect(() => {
+    xpPulse.value = withSequence(
+      withSpring(1.06, { damping: 6, stiffness: 260 }),
+      withSpring(1, { damping: 8, stiffness: 220 })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duration, category]);
+
+  const xpPulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: xpPulse.value }],
+  }));
 
   const handleSave = () => {
     if (!title.trim()) {
@@ -167,12 +186,14 @@ export const AddActivityModal: React.FC<AddActivityModalProps> = ({ visible, onC
             />
 
             {/* Points Estimate */}
-            <View style={[styles.xpEstimate, { backgroundColor: theme.primary + '15' }]}>
+            <Animated.View
+              style={[styles.xpEstimate, { backgroundColor: theme.primary + '15' }, xpPulseStyle]}
+            >
               <Ionicons name="sparkles" size={20} color={theme.primary} />
               <Text style={[styles.xpText, { color: theme.primary }]}>
                 Estimated Reward: +{Math.round(duration * 2.5)} XP
               </Text>
-            </View>
+            </Animated.View>
           </ScrollView>
 
           {/* Submit */}

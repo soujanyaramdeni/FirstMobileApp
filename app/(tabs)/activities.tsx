@@ -8,10 +8,44 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useAuth, Activity } from '@/context/AuthContext';
 import { Colors, CategoryColors } from '@/constants/theme';
 import { ActivityCard } from '@/components/ActivityCard';
 import { AddActivityModal } from '@/components/AddActivityModal';
+
+/** Filter chip that gives a satisfying little bounce when selected. */
+function FilterChip({
+  selected,
+  onPress,
+  children,
+}: {
+  selected: boolean;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  const scale = useSharedValue(1);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <Pressable
+      onPressIn={() => {
+        scale.value = withSpring(0.92, { damping: 12 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 8 });
+      }}
+      onPress={onPress}
+    >
+      <Animated.View style={style}>{children}</Animated.View>
+    </Pressable>
+  );
+}
 
 const CATEGORIES: (Activity['category'] | 'All')[] = [
   'All',
@@ -72,7 +106,10 @@ export default function ActivitiesScreen() {
         </View>
 
         {/* Stats Summary Banner */}
-        <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+        <Animated.View
+          entering={FadeInDown.springify().damping(16)}
+          style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}
+        >
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryVal, { color: theme.primary }]}>{activities.length}</Text>
             <Text style={[styles.summaryLabel, { color: theme.subtext }]}>Total Logs</Text>
@@ -87,10 +124,13 @@ export default function ActivitiesScreen() {
             <Text style={[styles.summaryVal, { color: theme.warning }]}>+{totalXP}</Text>
             <Text style={[styles.summaryLabel, { color: theme.subtext }]}>XP Earned</Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Search Bar */}
-        <View style={[styles.searchBox, { backgroundColor: theme.input, borderColor: theme.border }]}>
+        <Animated.View
+          entering={FadeInDown.delay(80).springify().damping(16)}
+          style={[styles.searchBox, { backgroundColor: theme.input, borderColor: theme.border }]}
+        >
           <Ionicons name="search-outline" size={20} color={theme.subtext} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
@@ -104,7 +144,7 @@ export default function ActivitiesScreen() {
               <Ionicons name="close-circle" size={18} color={theme.subtext} />
             </Pressable>
           ) : null}
-        </View>
+        </Animated.View>
 
         {/* Category Filters */}
         <ScrollView
@@ -118,30 +158,30 @@ export default function ActivitiesScreen() {
             const meta = cat !== 'All' ? CategoryColors[cat] : null;
 
             return (
-              <Pressable
-                key={cat}
-                style={[
-                  styles.filterChip,
-                  {
-                    backgroundColor: isSelected ? theme.primary : theme.card,
-                    borderColor: isSelected ? theme.primary : theme.cardBorder,
-                  },
-                ]}
-                onPress={() => setSelectedCategory(cat)}
-              >
-                {meta ? (
-                  <Ionicons
-                    name={meta.icon as any}
-                    size={14}
-                    color={isSelected ? '#FFF' : theme.text}
-                  />
-                ) : (
-                  <Ionicons name="grid-outline" size={14} color={isSelected ? '#FFF' : theme.text} />
-                )}
-                <Text style={[styles.filterText, { color: isSelected ? '#FFF' : theme.text }]}>
-                  {cat}
-                </Text>
-              </Pressable>
+              <FilterChip key={cat} selected={isSelected} onPress={() => setSelectedCategory(cat)}>
+                <View
+                  style={[
+                    styles.filterChip,
+                    {
+                      backgroundColor: isSelected ? theme.primary : theme.card,
+                      borderColor: isSelected ? theme.primary : theme.cardBorder,
+                    },
+                  ]}
+                >
+                  {meta ? (
+                    <Ionicons
+                      name={meta.icon as any}
+                      size={14}
+                      color={isSelected ? '#FFF' : theme.text}
+                    />
+                  ) : (
+                    <Ionicons name="grid-outline" size={14} color={isSelected ? '#FFF' : theme.text} />
+                  )}
+                  <Text style={[styles.filterText, { color: isSelected ? '#FFF' : theme.text }]}>
+                    {cat}
+                  </Text>
+                </View>
+              </FilterChip>
             );
           })}
         </ScrollView>
@@ -166,8 +206,8 @@ export default function ActivitiesScreen() {
               </Pressable>
             </View>
           ) : (
-            filteredActivities.map(act => (
-              <ActivityCard key={act.id} activity={act} onDelete={deleteActivity} isDark={isDark} />
+            filteredActivities.map((act, idx) => (
+              <ActivityCard key={act.id} activity={act} onDelete={deleteActivity} isDark={isDark} index={idx} />
             ))
           )}
         </View>

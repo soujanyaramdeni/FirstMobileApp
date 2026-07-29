@@ -1,20 +1,47 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Image,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useAuth } from '@/context/AuthContext';
-import { Colors } from '@/constants/theme';
-import { StatCard } from '@/components/StatCard';
 import { ActivityCard } from '@/components/ActivityCard';
-import { GoalItem } from '@/components/GoalItem';
 import { AddActivityModal } from '@/components/AddActivityModal';
+import { Confetti } from '@/components/Confetti';
+import { GoalItem } from '@/components/GoalItem';
+import { StatCard } from '@/components/StatCard';
+import { Colors } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import {
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+
+function AnimatedBar({ heightPct, color, delay }: { heightPct: number; color: string; delay: number }) {
+  const height = useSharedValue(0);
+
+  useEffect(() => {
+    height.value = withDelay(delay, withTiming(heightPct, { duration: 650, easing: Easing.out(Easing.cubic) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heightPct, delay]);
+
+  const style = useAnimatedStyle(() => ({
+    height: `${height.value}%`,
+  }));
+
+  return <Animated.View style={[styles.barFill, { backgroundColor: color }, style]} />;
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -23,6 +50,52 @@ export default function DashboardScreen() {
   const theme = isDark ? Colors.dark : Colors.light;
 
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [confettiTrigger, setConfettiTrigger] = useState(0);
+
+  const progressWidth = useSharedValue(0);
+  const streakScale = useSharedValue(1);
+
+  const targetProgressPct = user ? Math.min(100, (user.points % 300) / 3) : 0;
+
+  useEffect(() => {
+    progressWidth.value = withTiming(targetProgressPct, { duration: 900, easing: Easing.out(Easing.cubic) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetProgressPct]);
+
+  useEffect(() => {
+    // Gentle looping pulse on the streak flame badge to draw the eye
+    streakScale.value = withRepeat(
+      withSequence(
+        withTiming(1.12, { duration: 550, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: 550, easing: Easing.in(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+  }, [streakScale]);
+
+  const progressBarStyle = useAnimatedStyle(() => ({
+    width: `${progressWidth.value}%`,
+  }));
+
+  const streakStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: streakScale.value }],
+  }));
+
+  const handleGoalComplete = () => {
+    setConfettiTrigger(Date.now());
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    // Replay the progress-bar fill for a satisfying refresh feel.
+    progressWidth.value = 0;
+    await new Promise(resolve => setTimeout(resolve, 400));
+    progressWidth.value = withTiming(targetProgressPct, { duration: 700, easing: Easing.out(Easing.cubic) });
+    setRefreshing(false);
+  };
 
   // If user is not logged in, render guest banner
   if (!user) {
@@ -64,7 +137,13 @@ export default function DashboardScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
+        }
+      >
         {/* Header */}
         <View style={styles.headerRow}>
           <View style={styles.userMeta}>
@@ -79,10 +158,10 @@ export default function DashboardScreen() {
 
           <View style={styles.headerRight}>
             {/* Streak Badge */}
-            <View style={[styles.streakBadge, { backgroundColor: theme.warning + '20' }]}>
+            <Animated.View style={[styles.streakBadge, { backgroundColor: theme.warning + '20' }, streakStyle]}>
               <Ionicons name="flame" size={18} color={theme.warning} />
               <Text style={[styles.streakText, { color: theme.warning }]}>{user.streak}d</Text>
-            </View>
+            </Animated.View>
 
             {/* Theme Toggle */}
             <Pressable
@@ -113,12 +192,7 @@ export default function DashboardScreen() {
 
           {/* Progress bar */}
           <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.fillTrack,
-                { width: `${Math.min(100, (user.points % 300) / 3)}%` },
-              ]}
-            />
+            <Animated.View style={[styles.fillTrack, progressBarStyle]} />
           </View>
           <Text style={styles.progressLabel}>
             {(user.points % 300)} / 300 XP to Level {user.level + 1}
@@ -161,6 +235,7 @@ export default function DashboardScreen() {
             icon="checkmark-done-circle-outline"
             color="#6366F1"
             isDark={isDark}
+            index={0}
           />
           <StatCard
             title="Hours Logged"
@@ -168,6 +243,7 @@ export default function DashboardScreen() {
             icon="time-outline"
             color="#10B981"
             isDark={isDark}
+            index={1}
           />
           <StatCard
             title="Daily Streak"
@@ -175,6 +251,7 @@ export default function DashboardScreen() {
             icon="flame-outline"
             color="#F59E0B"
             isDark={isDark}
+            index={2}
           />
         </View>
 
@@ -184,8 +261,15 @@ export default function DashboardScreen() {
           <Text style={[styles.subTextRight, { color: theme.subtext }]}>Tap to complete</Text>
         </View>
         <View style={styles.goalsContainer}>
-          {goals.map(goal => (
-            <GoalItem key={goal.id} goal={goal} onToggle={toggleGoal} isDark={isDark} />
+          {goals.map((goal, idx) => (
+            <GoalItem
+              key={goal.id}
+              goal={goal}
+              onToggle={toggleGoal}
+              isDark={isDark}
+              index={idx}
+              onComplete={handleGoalComplete}
+            />
           ))}
         </View>
 
@@ -203,14 +287,10 @@ export default function DashboardScreen() {
                 <View key={day} style={styles.barColumn}>
                   <Text style={[styles.barValText, { color: theme.subtext }]}>{h}h</Text>
                   <View style={styles.barTrack}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        {
-                          height: `${heightPct}%`,
-                          backgroundColor: isToday ? theme.primary : theme.primary + '50',
-                        },
-                      ]}
+                    <AnimatedBar
+                      heightPct={heightPct}
+                      color={isToday ? theme.primary : theme.primary + '50'}
+                      delay={idx * 70}
                     />
                   </View>
                   <Text style={[styles.barDayText, { color: isToday ? theme.primary : theme.subtext, fontWeight: isToday ? '700' : '500' }]}>
@@ -238,14 +318,17 @@ export default function DashboardScreen() {
             <Text style={[styles.emptyText, { color: theme.subtext }]}>No activities logged yet today.</Text>
           </View>
         ) : (
-          recentActivities.map(act => (
-            <ActivityCard key={act.id} activity={act} onDelete={deleteActivity} isDark={isDark} />
+          recentActivities.map((act, idx) => (
+            <ActivityCard key={act.id} activity={act} onDelete={deleteActivity} isDark={isDark} index={idx} />
           ))
         )}
       </ScrollView>
 
       {/* Modal for adding activity */}
       <AddActivityModal visible={addModalVisible} onClose={() => setAddModalVisible(false)} />
+
+      {/* Celebration burst when a goal is completed */}
+      <Confetti trigger={confettiTrigger} />
     </View>
   );
 }
