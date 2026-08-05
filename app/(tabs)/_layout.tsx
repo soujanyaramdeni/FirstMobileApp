@@ -19,7 +19,7 @@ function AnimatedTabIcon({
 }: {
   name: keyof typeof Ionicons.glyphMap;
   focusedName: keyof typeof Ionicons.glyphMap;
-  color: string;
+  color: any;
   focused: boolean;
 }) {
   const scale = useSharedValue(1);

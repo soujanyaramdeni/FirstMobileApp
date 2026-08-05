@@ -48,7 +48,7 @@ export default function RegisterScreen() {
     );
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!name.trim()) {
       setError('Please enter your full name.');
       return;
@@ -74,7 +74,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    const res = register({
+    const res = await register({
       name,
       email,
       password,

@@ -36,7 +36,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   const cardOpacity = useSharedValue(1);
 
   const handleDelete = () => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (window.confirm(`Delete "${activity.title}"?`)) {
         runDeleteAnimation();
       } else {

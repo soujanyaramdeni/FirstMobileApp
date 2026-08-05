@@ -27,13 +27,13 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email.trim() || !password) {
       setError('Please enter both email and password.');
       return;
     }
 
-    const res = login(email, password);
+    const res = await login(email, password);
     if (!res.success) {
       setError(res.message);
     } else {

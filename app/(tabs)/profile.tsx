@@ -39,7 +39,7 @@ export default function ProfileScreen() {
   }
 
   const handleLogout = () => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (window.confirm('Are you sure you want to log out?')) {
         logout();
         router.replace('/login' as any);

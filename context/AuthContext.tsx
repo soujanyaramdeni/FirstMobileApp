@@ -1,11 +1,14 @@
+import { supabase } from '@/lib/supabase';
+import { SupabaseService } from '@/services/supabaseService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
   avatar: string;
   bio: string;
   role: string;
@@ -38,6 +41,7 @@ export interface Badge {
 
 export interface Goal {
   id: string;
+  userId?: string;
   title: string;
   category: string;
   completed: boolean;
@@ -78,10 +82,10 @@ interface AuthContextType {
   login: (
     email: string,
     pass: string
-  ) => {
+  ) => Promise<{
     success: boolean;
     message: string;
-  };
+  }>;
 
   register: (userData: {
     name: string;
@@ -90,12 +94,12 @@ interface AuthContextType {
     bio?: string;
     interests?: string[];
     avatar?: string;
-  }) => {
+  }) => Promise<{
     success: boolean;
     message: string;
-  };
+  }>;
 
-  logout: () => void;
+  logout: () => Promise<void>;
 
   updateProfile: (updated: Partial<User>) => void;
 
@@ -277,7 +281,6 @@ const INITIAL_COMMUNITY_POSTS: CommunityPost[] = [
 ];
 
 export function evaluateBadges(user: User, userActivities: Activity[]): Badge[] {
-  const totalMinutes = userActivities.reduce((acc, curr) => acc + curr.duration, 0);
   const codingMins = userActivities.filter(a => a.category === 'Coding').reduce((acc, curr) => acc + curr.duration, 0);
   const workoutCount = userActivities.filter(a => a.category === 'Workout').length;
   const readingMins = userActivities.filter(a => a.category === 'Reading').reduce((acc, curr) => acc + curr.duration, 0);
@@ -332,38 +335,168 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const userActivities = user ? activities.filter(a => a.userId === user.id) : [];
   const currentBadges = user ? evaluateBadges(user, userActivities) : INITIAL_BADGES;
 
-  // Load from AsyncStorage on startup
+  // Listen to Supabase Auth state change
+  // useEffect(() => {
+  //   const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+  //     if (session?.user) {
+  //       setCurrentUserId(session.user.id);
+  //     }
+  //   });
+  //   return () => {
+  //     authListener.subscription.unsubscribe();
+  //   };
+  // }, []);
+
+  useEffect(() => {
+
+    if (Platform.OS === "web") return;
+
+    const { data } =
+    supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setCurrentUserId(session.user.id);
+      }
+  });
+
+    return () => {
+        data.subscription.unsubscribe();
+    };
+
+}, []);
+
+  // Load state from Supabase & AsyncStorage on startup
   useEffect(() => {
     (async () => {
-      const [
-        storedUsers,
-        storedUserId,
-        storedActivities,
-        storedGoals,
-        storedPosts,
-        storedTheme,
-      ] = await Promise.all([
-        loadJSON<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS),
-        AsyncStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID),
-        loadJSON<Activity[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES),
-        loadJSON<Goal[]>(STORAGE_KEYS.GOALS, INITIAL_GOALS),
-        loadJSON<CommunityPost[]>(STORAGE_KEYS.POSTS, INITIAL_COMMUNITY_POSTS),
-        AsyncStorage.getItem(STORAGE_KEYS.THEME),
-      ]);
+      try {
+        // Load local fallbacks
+        const [
+          storedUsers,
+          storedUserId,
+          storedActivities,
+          storedGoals,
+          storedPosts,
+          storedTheme,
+        ] = await Promise.all([
+          loadJSON<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS),
+          AsyncStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID),
+          loadJSON<Activity[]>(STORAGE_KEYS.ACTIVITIES, INITIAL_ACTIVITIES),
+          loadJSON<Goal[]>(STORAGE_KEYS.GOALS, INITIAL_GOALS),
+          loadJSON<CommunityPost[]>(STORAGE_KEYS.POSTS, INITIAL_COMMUNITY_POSTS),
+          AsyncStorage.getItem(STORAGE_KEYS.THEME),
+        ]);
 
-      setAllUsers(storedUsers && storedUsers.length > 0 ? storedUsers : INITIAL_USERS);
-      setCurrentUserId(storedUserId || 'usr_demo_1');
-      setActivities(storedActivities && storedActivities.length > 0 ? storedActivities : INITIAL_ACTIVITIES);
-      setGoals(storedGoals && storedGoals.length > 0 ? storedGoals : INITIAL_GOALS);
-      setCommunityPosts(storedPosts && storedPosts.length > 0 ? storedPosts : INITIAL_COMMUNITY_POSTS);
-      if (storedTheme === 'dark' || storedTheme === 'light') setThemeMode(storedTheme);
+        let effectiveUsers = storedUsers && storedUsers.length > 0 ? storedUsers : INITIAL_USERS;
+        let effectiveUserId = storedUserId || 'usr_demo_1';
+        let effectiveActivities = storedActivities && storedActivities.length > 0 ? storedActivities : INITIAL_ACTIVITIES;
+        let effectiveGoals = storedGoals && storedGoals.length > 0 ? storedGoals : INITIAL_GOALS;
+        let effectivePosts = storedPosts && storedPosts.length > 0 ? storedPosts : INITIAL_COMMUNITY_POSTS;
 
-      hasHydrated.current = true;
-      setIsLoading(false);
+        // Try fetching remote data from Supabase
+        const remoteProfiles = await SupabaseService.getProfiles();
+        if (remoteProfiles && remoteProfiles.length > 0) {
+          const mappedRemoteUsers: User[] = remoteProfiles.map(p => ({
+            id: p.id,
+            name: p.name,
+            email: p.email,
+            avatar: p.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+            bio: p.bio || 'Active member pursuing daily goals!',
+            role: p.role || 'Member',
+            joinDate: p.join_date || 'Just now',
+            streak: p.streak ?? 1,
+            points: p.points ?? 100,
+            level: p.level ?? 1,
+            badges: INITIAL_BADGES,
+            interests: p.interests || ['Productivity'],
+          }));
+          
+          // Merge remote profiles with local
+          const userMap = new Map<string, User>();
+          effectiveUsers.forEach(u => userMap.set(u.id, u));
+          mappedRemoteUsers.forEach(u => userMap.set(u.id, u));
+          effectiveUsers = Array.from(userMap.values());
+        }
+
+        const remoteActivities = await SupabaseService.getActivities();
+        if (remoteActivities && remoteActivities.length > 0) {
+          const mappedActivities: Activity[] = remoteActivities.map(a => ({
+            id: a.id || `act_${Date.now()}`,
+            userId: a.user_id,
+            title: a.title,
+            category: a.category,
+            duration: a.duration,
+            points: a.points,
+            date: a.date || new Date().toISOString(),
+            notes: a.notes,
+          }));
+          effectiveActivities = mappedActivities;
+        }
+
+        const remoteGoals = await SupabaseService.getGoals();
+        if (remoteGoals && remoteGoals.length > 0) {
+          const mappedGoals: Goal[] = remoteGoals.map(g => ({
+            id: g.id || `g_${Date.now()}`,
+            userId: g.user_id,
+            title: g.title,
+            category: g.category,
+            completed: g.completed,
+            points: g.points,
+          }));
+          effectiveGoals = mappedGoals;
+        }
+
+        const remotePosts = await SupabaseService.getCommunityPosts();
+        if (remotePosts && remotePosts.length > 0) {
+          const mappedPosts: CommunityPost[] = remotePosts.map(p => {
+            const author = effectiveUsers.find(u => u.id === p.user_id);
+            return {
+              id: p.id || `post_${Date.now()}`,
+              userId: p.user_id,
+              userName: author ? author.name : 'Community Member',
+              userAvatar: author ? author.avatar : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+              userRole: author ? author.role : 'Member',
+              content: p.content,
+              category: p.category,
+              createdAt: p.created_at ? new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
+              kudos: p.kudos || 0,
+              fires: p.fires || 0,
+              hearts: p.hearts || 0,
+              userReactions: {},
+            };
+          });
+          effectivePosts = mappedPosts;
+        }
+
+        // Check if there is an active Supabase Session
+        // const { data: sessionData } = await supabase.auth.getSession();
+        // if (sessionData?.session?.user) {
+        //   effectiveUserId = sessionData.session.user.id;
+        // }
+
+        if (Platform.OS !== "web") {
+    const { data } = await supabase.auth.getSession();
+
+    if (data.session?.user) {
+        effectiveUserId = data.session.user.id;
+    }
+}
+
+        setAllUsers(effectiveUsers);
+        setCurrentUserId(effectiveUserId);
+        setActivities(effectiveActivities);
+        setGoals(effectiveGoals);
+        setCommunityPosts(effectivePosts);
+        if (storedTheme === 'dark' || storedTheme === 'light') setThemeMode(storedTheme);
+
+      } catch (e) {
+        console.warn('Initialization error:', e);
+      } finally {
+        hasHydrated.current = true;
+        setIsLoading(false);
+      }
     })();
   }, []);
 
-  // Persist to storage
+  // Persist local state
   useEffect(() => {
     if (!hasHydrated.current) return;
     saveJSON(STORAGE_KEYS.USERS, allUsers);
@@ -402,15 +535,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setThemeMode(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  const login = (email: string, pass: string) => {
+  const login = async (email: string, pass: string) => {
     const cleanEmail = email.trim().toLowerCase();
-    const existingUser = allUsers.find(u => u.email.toLowerCase() === cleanEmail);
+
+    // 1. Attempt Supabase Auth
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: pass,
+      });
+
+      if (!error && data?.user) {
+        setCurrentUserId(data.user.id);
+        return { success: true, message: 'Logged in successfully with Supabase!' };
+      }
+    } catch (e) {
+      console.warn('Supabase login error, attempting local fallback:', e);
+    }
+
+    // 2. Fallback to local accounts
+    const existingUser = allUsers.find(u => u.email?.toLowerCase() === cleanEmail);
 
     if (!existingUser) {
       return { success: false, message: 'No account found with this email. Please register.' };
     }
 
-    if (existingUser.password !== pass) {
+    if (existingUser.password && existingUser.password !== pass) {
       return { success: false, message: 'Incorrect password. Please try again.' };
     }
 
@@ -419,21 +569,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const quickLogin = (email: string) => {
-    const existingUser = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const existingUser = allUsers.find(u => u.email?.toLowerCase() === email.toLowerCase());
     if (existingUser) {
       setCurrentUserId(existingUser.id);
     }
   };
 
-  const register = (userData: { name: string; email: string; password: string; bio?: string; interests?: string[]; avatar?: string }) => {
+  const register = async (userData: {
+    name: string;
+    email: string;
+    password: string;
+    bio?: string;
+    interests?: string[];
+    avatar?: string;
+  }) => {
     const cleanEmail = userData.email.trim().toLowerCase();
 
-    if (allUsers.some(u => u.email.toLowerCase() === cleanEmail)) {
-      return { success: false, message: 'An account with this email already exists.' };
+// Remove users that don't have a valid email
+const validUsers = allUsers.filter(
+  user => typeof user.email === 'string' && user.email.trim() !== ''
+);
+
+if (
+  validUsers.some(
+    user => user.email.toLowerCase() === cleanEmail
+  )
+) {
+  return {
+    success: false,
+    message: 'An account with this email already exists.'
+  };
+}
+
+    let createdId = `usr_${Date.now()}`;
+
+    // 1. Attempt Supabase registration
+    try {
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: userData.password,
+        options: {
+          data: {
+            name: userData.name.trim(),
+            avatar: userData.avatar,
+            bio: userData.bio,
+          },
+        },
+      });
+
+      if (!authErr && authData?.user) {
+        createdId = authData.user.id;
+      }
+    } catch (e) {
+      console.warn('Supabase register notice (using local ID):', e);
     }
 
     const newUser: User = {
-      id: `usr_${Date.now()}`,
+      id: createdId,
       name: userData.name.trim(),
       email: cleanEmail,
       password: userData.password,
@@ -450,10 +642,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setAllUsers(prev => [...prev, newUser]);
     setCurrentUserId(newUser.id);
+
+    // Update profile in Supabase table
+    await SupabaseService.createProfile({
+  id: createdId,
+  name: newUser.name,
+  email: newUser.email,
+  avatar: newUser.avatar,
+  bio: newUser.bio,
+  role: newUser.role,
+  join_date: new Date().toISOString(),
+  streak: newUser.streak,
+  points: newUser.points,
+  level: newUser.level,
+  interests: newUser.interests,
+});
+
     return { success: true, message: 'Account created successfully!' };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('Supabase logout error:', e);
+    }
     setCurrentUserId(null);
   };
 
@@ -461,6 +674,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
     const updatedUser = { ...user, ...updated };
     setAllUsers(prev => prev.map(u => (u.id === user.id ? updatedUser : u)));
+
+    // Remote sync
+    SupabaseService.updateProfile(user.id, {
+      name: updatedUser.name,
+      avatar: updatedUser.avatar,
+      bio: updatedUser.bio,
+      role: updatedUser.role,
+      streak: updatedUser.streak,
+      points: updatedUser.points,
+      level: updatedUser.level,
+      interests: updatedUser.interests,
+    }).catch(() => {});
   };
 
   const updateBadges = (updatedBadges: Badge[]) => {
@@ -469,11 +694,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAllUsers(prev => prev.map(u => (u.id === user.id ? updatedUser : u)));
   };
 
-  const addActivity = (activityData: Omit<Activity, 'id' | 'userId'>) => {
+  const addActivity = async (activityData: Omit<Activity, 'id' | 'userId'>) => {
     if (!user) return;
+    const tempId = `act_${Date.now()}`;
     const newActivity: Activity = {
       ...activityData,
-      id: `act_${Date.now()}`,
+      id: tempId,
       userId: user.id,
     };
 
@@ -492,10 +718,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       streak: user.streak > 0 ? user.streak : 1,
       badges: newEvaluatedBadges,
     });
+
+    // Save to Supabase
+    SupabaseService.addActivity({
+      user_id: user.id,
+      title: activityData.title,
+      category: activityData.category,
+      duration: activityData.duration,
+      points: activityData.points,
+      notes: activityData.notes,
+      date: activityData.date,
+    }).catch(() => {});
   };
 
   const deleteActivity = (id: string) => {
     setActivities(prev => prev.filter(act => act.id !== id));
+    SupabaseService.deleteActivity(id).catch(() => {});
   };
 
   const toggleGoal = (id: string) => {
@@ -506,6 +744,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (nextCompleted && user) {
             updateProfile({ points: user.points + g.points });
           }
+          SupabaseService.updateGoal(id, { completed: nextCompleted }).catch(() => {});
           return { ...g, completed: nextCompleted };
         }
         return g;
@@ -514,22 +753,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addGoal = (goalData: Omit<Goal, 'id' | 'completed'>) => {
+    if (!user) return;
+    const tempId = `g_${Date.now()}`;
     const newGoal: Goal = {
       ...goalData,
-      id: `g_${Date.now()}`,
+      id: tempId,
       completed: false,
     };
     setGoals(prev => [...prev, newGoal]);
+
+    SupabaseService.addGoal({
+      user_id: user.id,
+      title: goalData.title,
+      category: goalData.category,
+      completed: false,
+      points: goalData.points,
+    }).catch(() => {});
   };
 
   const deleteGoal = (id: string) => {
     setGoals(prev => prev.filter(g => g.id !== id));
+    SupabaseService.deleteGoal(id).catch(() => {});
   };
 
   const addCommunityPost = (post: { content: string; category: string }) => {
     if (!user) return;
+    const tempId = `post_${Date.now()}`;
     const newPost: CommunityPost = {
-      id: `post_${Date.now()}`,
+      id: tempId,
       userId: user.id,
       userName: user.name,
       userAvatar: user.avatar,
@@ -543,6 +794,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userReactions: { kudos: true },
     };
     setCommunityPosts(prev => [newPost, ...prev]);
+
+    SupabaseService.addCommunityPost({
+      user_id: user.id,
+      content: post.content.trim(),
+      category: post.category,
+      kudos: 1,
+      fires: 0,
+      hearts: 0,
+    }).catch(() => {});
   };
 
   const togglePostReaction = (postId: string, reactionType: 'kudos' | 'fire' | 'heart') => {
@@ -561,11 +821,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const firesDelta = reactionType === 'fire' ? (isSelected ? -1 : 1) : 0;
           const heartsDelta = reactionType === 'heart' ? (isSelected ? -1 : 1) : 0;
 
+          const newKudos = Math.max(0, p.kudos + kudosDelta);
+          const newFires = Math.max(0, p.fires + firesDelta);
+          const newHearts = Math.max(0, p.hearts + heartsDelta);
+
+          SupabaseService.updatePostReactions(postId, {
+            kudos: newKudos,
+            fires: newFires,
+            hearts: newHearts,
+          }).catch(() => {});
+
           return {
             ...p,
-            kudos: Math.max(0, p.kudos + kudosDelta),
-            fires: Math.max(0, p.fires + firesDelta),
-            hearts: Math.max(0, p.hearts + heartsDelta),
+            kudos: newKudos,
+            fires: newFires,
+            hearts: newHearts,
             userReactions: updatedReactions,
           };
         }
@@ -613,4 +883,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
